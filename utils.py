@@ -141,3 +141,62 @@ def std_weighted(values, average, weights):
     average = np.sum(weights*values)
     variance = np.sum(weights * (values-average)**2) / (1. - np.sum(weights**2))
     return np.sqrt(variance)
+
+
+def filter_state_polls(df, state, weight_threshold, date_range=None):
+    """
+    Filter a DataFrame of polling data for a specific state and weight threshold.
+    
+    Parameters:
+    df (pandas.DataFrame): The input DataFrame containing polling data.
+    state (str): The name of the state to filter for.
+    weight_threshold (float): The minimum weight to include a poll.
+    date_range (tuple): Optional. A tuple of (start_date, end_date) to filter by date.
+    
+    Returns:
+    pandas.DataFrame: A new DataFrame containing only the filtered data.
+    """
+    
+    # First, filter by state
+    state_df = df[df['state'] == state]
+    
+    # Then, filter by weight
+    state_df = state_df[state_df['weight'] >= weight_threshold]
+    
+    # If a date range is provided, filter by date
+    if date_range is not None:
+        start_date, end_date = date_range
+        state_df['startdate'] = pd.to_datetime(state_df['startdate'])
+        state_df['enddate'] = pd.to_datetime(state_df['enddate'])
+        state_df = state_df[(state_df['startdate'] >= start_date) & (state_df['enddate'] <= end_date)]
+    
+    # Reset the index of the resulting DataFrame
+    return state_df.reset_index(drop=True)
+
+
+def convert_results_to_dict(df):
+    """
+    Convert the election results DataFrame to a nested dictionary.
+    
+    Parameters:
+    df (pandas.DataFrame): DataFrame containing election results with columns
+                           'state', 'candidate_name', and 'pct_trend_adjusted'
+    
+    Returns:
+    dict: A nested dictionary where the first level key is the state,
+          the second level key is the candidate name, and the value is
+          the pct_trend_adjusted.
+    """
+    results_dict = {}
+    
+    for _, row in df.iterrows():
+        state = row['state']
+        candidate = row['candidate_name']
+        pct = row['pct_trend_adjusted']
+        
+        if state not in results_dict:
+            results_dict[state] = {}
+        
+        results_dict[state][candidate] = pct
+    
+    return results_dict

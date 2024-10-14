@@ -15,7 +15,7 @@ def poll_weight(
     pollscore,
     sample_size,
     reference_today_date,
-    time_penalty=14,
+    time_penalty=9,
     harris_and_before_dropout=False,
     pollster_name: str = None,
     exclude_pollsters: list[str] | None = None,  # To answer a reddit question, not actually used
@@ -90,7 +90,7 @@ def poll_weight(
         return 0.0
     return score
 
-def add_poll_weights(df, reference_date):
+def add_poll_weights(df, reference_date, harris_and_before_dropout=False):
     # Convert date columns to datetime
     df.loc[:,'start_date'] = pd.to_datetime(df['start_date'], format='%m/%d/%y',errors='coerce')
     df.loc[:,'end_date'] = pd.to_datetime(df['end_date'], format='%m/%d/%y',errors='coerce')
@@ -108,6 +108,7 @@ def add_poll_weights(df, reference_date):
         row['pollscore'],
         row['sample_size'],
         reference_today_date,
+        harris_and_before_dropout = harris_and_before_dropout,
         pollster_name=row['pollster']
     ), axis=1)
     
@@ -118,14 +119,16 @@ def combine_districts(state):
     district_to_state = {
         'Maine CD-1': 'Maine',
         'Maine CD-2': 'Maine',
-        'Nebraska CD-2': 'Nebraska'
+        'Nebraska CD-1': 'Nebraska',
+        'Nebraska CD-2': 'Nebraska',
+        'Nebraska CD-3': 'Nebraska'
     }
     
     # Return the mapped state if it's a district, otherwise return the original state
     return district_to_state.get(state, state)
 
 
-def cleanup_data(pad):
+def cleanup_data(pad, harris_filter=False):
 
     # Clean up polling data 
     try:
@@ -142,14 +145,28 @@ def cleanup_data(pad):
         
     # convert data frame to Python dictionary with keys containing names of columns in the data frame
     # and each key containing a list of strings or float values
-    pad = pad.dropna(subset=['state','start_date','end_date'])
-    pad = add_poll_weights(pad,'10-06-2024')
+    #pad = pad.dropna(subset=['state','start_date','end_date'])
+    pad = add_poll_weights(pad,'10-12-2024',harris_filter)
 
-    pad = pad.dropna(subset=['state','start_date','end_date'])
+    #pad = pad.dropna(subset=['state','start_date','end_date'])
     
     pad = pad[pad['weight'] >0]
     pad['state'] = pad['state'].apply(combine_districts)
 
     pad = pad[pad['party'].isin(['DEM','REP'])]
+
+    """
+    if harris_filter:
+        # Filter for polls that include both Trump and Harris
+        trump_polls = pad[pad['candidate_name'].str.contains('Trump', case=False, na=False)]['poll_id']
+        harris_polls = pad[pad['candidate_name'].str.contains('Harris', case=False, na=False)]['poll_id']
+        valid_polls = set(trump_polls) & set(harris_polls)  # Intersection of Trump and Harris polls
+        
+        # Keep only the rows from valid polls (those including both Trump and Harris)
+        pad = pad[pad['poll_id'].isin(valid_polls)]
+        
+        # Final filter to keep only Trump and Harris rows
+        pad = pad[pad['candidate_name'].str.contains('Trump|Harris', case=False, na=False)]
+    """
 
     return pad

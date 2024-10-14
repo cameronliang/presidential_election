@@ -21,14 +21,14 @@ def std_weighted(values, average, weights, state):
         
         # Check for division by zero
         if denominator == 0:
-            print(f"Debug info for {state if state else 'unknown state'}:")
-            print(f"Values: {values}")
-            print(f"Weights: {weights}")
-            print(f"Sum of weights: {np.sum(weights)}")
-            print(f"Sum of squared weights: {np.sum(weights**2)}")
-            raise ZeroDivisionError("Sum of squared weights is 1, leading to division by zero")
-        
-        
+            #print(f"Debug info for {state if state else 'unknown state'}:")
+            #print(f"Values: {values}")
+            #print(f"Weights: {weights}")
+            #print(f"Sum of weights: {np.sum(weights)}")
+            #print(f"Sum of squared weights: {np.sum(weights**2)}")
+            #raise ZeroDivisionError("Sum of squared weights is 1, leading to division by zero")
+            return 0.001
+        #print(numerator)
         variance = numerator / denominator
         return np.sqrt(variance)
     
@@ -43,7 +43,7 @@ def std_weighted(values, average, weights, state):
 
 def simulate_elections(ppd, states, electors, bias = False, correlations = False, 
                        date_range = None, poll_type = 'pct', min_weight = 0.01, nsims = 1000, 
-                       poll_permute = False, **kwargs):
+                       poll_permute = False, results_2020=None, harris_filter=False, **kwargs):
     """
     Simulate election outcomes
     
@@ -98,44 +98,39 @@ def simulate_elections(ppd, states, electors, bias = False, correlations = False
         enddate   = np.array(ppd['enddate'])[stind]
         party     = np.array(ppd['party'])[stind]
 
-        # convert dates into format that would be easy to use for selection
-        #startdates = []#np.empty_like(startdate)
-        #enddates = []#np.empty_like(enddate)
-        #for j in range(startdate.size): 
-            
-        #    startdates.append(dt.strptime(startdate[j], "%m/%d/%y"))
-        #    enddates.append(dt.strptime(enddate[j], "%m/%d/%y"))
-            #print(j,startdates[j], enddates[j])
 
         startdates = pd.Series(startdate)
         enddates   = pd.Series(enddate)
-        #startdates = np.array(startdates)
-        #enddates   = np.array(enddates)
 
         # need to change to Harris. and get new data. 
-        indb = ((party == 'DEM') & (wpoll >= min_weight) &  
-                               (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
-        indt = ((party == 'REP') & (wpoll >= min_weight) &  
-                               (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
-                # need to change to Harris. and get new data. 
-        #indb = ((name == 'Kamala Harris') & (wpoll >= min_weight) &  
-        #                       (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
-        #indt = ((party == 'Donald Trump') & (wpoll >= min_weight) &  
-        #                       (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
+        if harris_filter:
+            indb = ((name == 'Kamala Harris') & (wpoll >= min_weight) &  
+                                (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
+            indt = ((party == 'Donald Trump') & (wpoll >= min_weight) &  
+                                (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
+        else:
+            indb = ((party == 'DEM') & (wpoll >= min_weight) &  
+                                   (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
+            indt = ((party == 'REP') & (wpoll >= min_weight) &  
+                                   (startdates > pd.to_datetime(date_range[0])) & (enddates <= pd.to_datetime(date_range[1])))
+            
         
         
         
         # Current data have no DC polls
         if len(indb) == 0 or len(indt) == 0:
             if state == 'District of Columbia':            
-                ave_biden[i] = 1.0  # 100% for Biden
-                ave_trump[i] = 0.0  # 0% for Trump
-                std_biden[i] = 0.0  # No uncertainty
-                std_trump[i] = 0.0  # No uncertainty
-                biden_votes = np.ones(nsims)  # All simulations give Biden 100%
-                trump_votes = np.zeros(nsims)  # All simulations give Trump 0%
-                biden_electoral_votes += electors[i]  # Biden always wins DC
+            # Option 2: Assign default values
+                ave_biden[i] = results_2020[state]['Joseph R. Biden Jr.'] /100.0
+                ave_trump[i] = results_2020[state]['Donald Trump'] /100.0
+                std_biden[i] = 0.0  # Default standard deviation of 1%
+                std_trump[i] = 0.0
+                #biden_votes = np.ones(nsims)  # All simulations give Biden 100%
+                #trump_votes = np.zeros(nsims)  # All simulations give Trump 0%
+                #biden_electoral_votes += electors[i]  # Biden always wins DC
                 continue  # Skip to the next state
+            else:
+                print(f'No data for {state}')
             continue
 
     
@@ -156,23 +151,17 @@ def simulate_elections(ppd, states, electors, bias = False, correlations = False
 
 
             if len(biden_polls) == 1:
-                print(biden_poll)
-                exit()
+                print(f'{state} - 1 poll only: Dem = {biden_polls}, Rep = {trump_polls}')
             std_biden[i] = std_weighted(biden_polls, ave_biden[i], poll_wb, state)
             std_trump[i] = std_weighted(trump_polls, ave_trump[i], poll_wt, state)
         else:
-            
-            print('------------')
-            print(f"Warning: No valid polls with non-zero weights for {state}")
-            print('b=',poll_wb)
-            print('t=',poll_wt)
-            print('------------')
+
             # Option 2: Assign default values
-            ave_biden[i] = 0.5  # Default to 50% for both candidates
-            ave_trump[i] = 0.5
-            std_biden[i] = 0.05  # Default standard deviation of 5%
-            std_trump[i] = 0.05
-            
+            ave_biden[i] = results_2020[state]['Joseph R. Biden Jr.'] 
+            ave_trump[i] = results_2020[state]['Donald Trump'] 
+            std_biden[i] = 0.0  # Default standard deviation of 1%
+            std_trump[i] = 0.0
+            print(f'{state} - 2020 results: Dem = {ave_biden[i]}, Rep ={ave_trump[i]}')            
         if bias: # if this option, apply bias to the averages
             ave_biden[i] += dem_bias[i]
             ave_trump[i] += rep_bias[i]
@@ -183,8 +172,14 @@ def simulate_elections(ppd, states, electors, bias = False, correlations = False
             biden_votes = biden_polls[ibs] 
             trump_votes = trump_polls[ibs] 
         elif correlations: # if correlations are to be imposed only produce random numbers
-            biden_votes = tdist(n_biden[i]-1, size = nsims)
-            trump_votes = tdist(n_trump[i]-1, size = nsims)
+            if n_biden[i] <= 1: 
+                biden_votes = tdist(1, size = nsims)
+            else:
+                biden_votes = tdist(n_biden[i]-1, size = nsims)
+            if n_trump[i] <= 1:
+                trump_votes = tdist(1, size = nsims)        
+            else:
+                trump_votes = tdist(n_trump[i]-1, size = nsims)
         else: # realization for the fiducial model
             biden_votes = ave_biden[i] + std_biden[i] * tdist(max(1,n_biden[i]-1), size = nsims)
             trump_votes = ave_trump[i] + std_trump[i] * tdist(max(1,n_trump[i]-1), size = nsims)
@@ -200,7 +195,7 @@ def simulate_elections(ppd, states, electors, bias = False, correlations = False
             trump_wins = (trump_votes[:] > biden_votes[:])
 
             biden_electoral_votes[biden_wins] += electors[i]
-            # I asked you to assign draws with 50% probability but here they are all assigned to Trump
+            # assign draws with 50% probability but here they are all assigned to Trump
             # to see how this boosts his changes, the chance of a draw here is negligible however
             trump_electoral_votes[draws]      += electors[i] # assume all draws go to Trump
             
